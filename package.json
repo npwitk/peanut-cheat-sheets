@@ -1,0 +1,20 @@
+{
+  "name": "cheat-sheet-marketplace",
+  "version": "1.0.0",
+  "description": "A marketplace for selling high-quality cheat sheets to SIIT students",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "cd server && npm start",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-all": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "keywords": ["cheat-sheet", "marketplace", "education", "siit"],
+  "author": "Nonprawich Intakaew",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
