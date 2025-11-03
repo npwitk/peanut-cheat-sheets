@@ -185,8 +185,7 @@ router.delete('/account', authenticateToken, async (req, res) => {
   try {
     const user_id = req.user.user_id;
 
-    // Try to deactivate user account (soft delete)
-    // This will fail gracefully if columns don't exist (migration not run)
+    // Try to deactivate user account
     try {
       // Check if account is already deactivated
       const user = await db.queryOne(
@@ -210,7 +209,7 @@ router.delete('/account', authenticateToken, async (req, res) => {
       );
     } catch (dbError) {
       // If deactivation columns don't exist (migration not run), just log user out
-      // This provides backwards compatibility
+      // Backwards compatibility
       console.log('Deactivation columns not found, migration may not be run yet:', dbError.message);
     }
 
