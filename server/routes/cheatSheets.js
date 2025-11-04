@@ -163,9 +163,13 @@ router.get('/', optionalAuth, async (req, res) => {
         cs.youtube_links = null;
       }
 
-      // SECURITY: Hide actual file paths from everyone for public API
-      // Users should never see the actual GCS paths (if not purchased!)
+      // SECURITY: Hide actual file paths from everyone in public list
+      // Users should never see the actual GCS paths
       delete cs.file_path; // Remove actual PDF path
+
+      // Replace preview_image_path with a proxy URL (or keep full URL for now - images are safe to display)
+      // Preview images are public (safe to show), but we want consistent pattern
+      // Keep preview_image_path as-is for now since it's needed for display
     });
 
     // Get total count
@@ -301,7 +305,9 @@ router.get('/:id', optionalAuth, async (req, res) => {
     }
 
     // Hide sensitive data from users who haven't purchased
-    if (!hasPurchased || (isFree && !userId)) {
+    // BUT allow creators to see their own youtube links for editing
+    const isCreator = userId && userId === cheatSheet.created_by;
+    if (!isCreator && (!hasPurchased || (isFree && !userId))) {
       cheatSheet.youtube_links = null;
     }
 
