@@ -270,6 +270,24 @@ const Loading = styled.div`
   color: ${props => props.theme.colors.textSecondary};
 `;
 
+const SectionHeader = styled.h2`
+  font-size: ${props => props.theme.typography.sizes['2xl']};
+  margin-bottom: 1.5rem;
+  margin-top: 3rem;
+  color: ${props => props.theme.colors.text};
+  font-weight: ${props => props.theme.typography.weights.bold};
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid ${props => props.theme.colors.border};
+
+  &:first-of-type {
+    margin-top: 0;
+  }
+`;
+
+const SectionDivider = styled.div`
+  margin: 3rem 0;
+`;
+
 const Home = () => {
   const [cheatSheets, setCheatSheets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -365,6 +383,10 @@ const Home = () => {
 
   const sortedCheatSheets = getSortedCheatSheets();
 
+  // Separate purchased and unpurchased cheat sheets
+  const purchasedSheets = sortedCheatSheets.filter(sheet => sheet.is_purchased);
+  const unpurchasedSheets = sortedCheatSheets.filter(sheet => !sheet.is_purchased);
+
   const handleSearch = (e) => {
     e.preventDefault();
     fetchCheatSheets();
@@ -406,51 +428,111 @@ const Home = () => {
       {sortedCheatSheets.length === 0 ? (
         <Loading>No cheat sheets found</Loading>
       ) : (
-        <Grid>
-          {sortedCheatSheets.map((sheet) => (
-            <Card key={sheet.cheatsheet_id} onClick={() => handleCardClick(sheet.cheatsheet_id)}>
-              {sheet.is_purchased && <PurchasedBadge>✓</PurchasedBadge>}
-              <PreviewImageContainer>
-                {sheet.preview_image_path && sheet.preview_image_path.startsWith('http') ? (
-                  <PreviewImage
-                    src={sheet.preview_image_path}
-                    alt={sheet.title}
-                    loading="lazy"
-                    decoding="async"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      const placeholder = e.target.nextSibling;
-                      if (placeholder) placeholder.style.display = 'flex';
-                    }}
-                  />
-                ) : null}
-                {(!sheet.preview_image_path || !sheet.preview_image_path.startsWith('http')) && (
-                  <NoPreviewPlaceholder>
-                    {sheet.course_code}
-                  </NoPreviewPlaceholder>
-                )}
-              </PreviewImageContainer>
-              <CardContent>
-                <TagsContainer>
-                  <CourseCode>{sheet.course_code}</CourseCode>
-                  {sheet.exam_type && <MetaTag>{sheet.exam_type}</MetaTag>}
-                </TagsContainer>
-                <CheatSheetTitle>{sheet.title}</CheatSheetTitle>
-                <Description>{sheet.description}</Description>
-                <CardFooter>
-                  <Price>
-                    {parseFloat(sheet.price || 0) === 0 ? 'FREE' : `${parseFloat(sheet.price).toFixed(2)} ฿`}
-                  </Price>
-                  <Stats>
-                    <span><StarIcon size={14} /> {parseFloat(sheet.average_rating || 0).toFixed(1)}</span>
-                    <span><EyeIcon size={14} /> {sheet.view_count}</span>
-                    <span><CartIcon size={14} /> {sheet.purchase_count}</span>
-                  </Stats>
-                </CardFooter>
-              </CardContent>
-            </Card>
-          ))}
-        </Grid>
+        <>
+          {/* Unpurchased Cheat Sheets Section */}
+          {unpurchasedSheets.length > 0 && (
+            <>
+              <SectionHeader>Available Cheat Sheets</SectionHeader>
+              <Grid>
+                {unpurchasedSheets.map((sheet) => (
+                  <Card key={sheet.cheatsheet_id} onClick={() => handleCardClick(sheet.cheatsheet_id)}>
+                    <PreviewImageContainer>
+                      {sheet.preview_image_path && sheet.preview_image_path.startsWith('http') ? (
+                        <PreviewImage
+                          src={sheet.preview_image_path}
+                          alt={sheet.title}
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            const placeholder = e.target.nextSibling;
+                            if (placeholder) placeholder.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      {(!sheet.preview_image_path || !sheet.preview_image_path.startsWith('http')) && (
+                        <NoPreviewPlaceholder>
+                          {sheet.course_code}
+                        </NoPreviewPlaceholder>
+                      )}
+                    </PreviewImageContainer>
+                    <CardContent>
+                      <TagsContainer>
+                        <CourseCode>{sheet.course_code}</CourseCode>
+                        {sheet.exam_type && <MetaTag>{sheet.exam_type}</MetaTag>}
+                      </TagsContainer>
+                      <CheatSheetTitle>{sheet.title}</CheatSheetTitle>
+                      <Description>{sheet.description}</Description>
+                      <CardFooter>
+                        <Price>
+                          {parseFloat(sheet.price || 0) === 0 ? 'FREE' : `${parseFloat(sheet.price).toFixed(2)} ฿`}
+                        </Price>
+                        <Stats>
+                          <span><StarIcon size={14} /> {parseFloat(sheet.average_rating || 0).toFixed(1)}</span>
+                          <span><EyeIcon size={14} /> {sheet.view_count}</span>
+                          <span><CartIcon size={14} /> {sheet.purchase_count}</span>
+                        </Stats>
+                      </CardFooter>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Grid>
+            </>
+          )}
+
+          {/* Purchased Cheat Sheets Section */}
+          {purchasedSheets.length > 0 && (
+            <>
+              <SectionDivider />
+              <SectionHeader>My Purchased Cheat Sheets</SectionHeader>
+              <Grid>
+                {purchasedSheets.map((sheet) => (
+                  <Card key={sheet.cheatsheet_id} onClick={() => handleCardClick(sheet.cheatsheet_id)}>
+                    <PurchasedBadge>✓</PurchasedBadge>
+                    <PreviewImageContainer>
+                      {sheet.preview_image_path && sheet.preview_image_path.startsWith('http') ? (
+                        <PreviewImage
+                          src={sheet.preview_image_path}
+                          alt={sheet.title}
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            const placeholder = e.target.nextSibling;
+                            if (placeholder) placeholder.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      {(!sheet.preview_image_path || !sheet.preview_image_path.startsWith('http')) && (
+                        <NoPreviewPlaceholder>
+                          {sheet.course_code}
+                        </NoPreviewPlaceholder>
+                      )}
+                    </PreviewImageContainer>
+                    <CardContent>
+                      <TagsContainer>
+                        <CourseCode>{sheet.course_code}</CourseCode>
+                        {sheet.exam_type && <MetaTag>{sheet.exam_type}</MetaTag>}
+                      </TagsContainer>
+                      <CheatSheetTitle>{sheet.title}</CheatSheetTitle>
+                      <Description>{sheet.description}</Description>
+                      <CardFooter>
+                        <Price>
+                          {parseFloat(sheet.price || 0) === 0 ? 'FREE' : `${parseFloat(sheet.price).toFixed(2)} ฿`}
+                        </Price>
+                        <Stats>
+                          <span><StarIcon size={14} /> {parseFloat(sheet.average_rating || 0).toFixed(1)}</span>
+                          <span><EyeIcon size={14} /> {sheet.view_count}</span>
+                          <span><CartIcon size={14} /> {sheet.purchase_count}</span>
+                        </Stats>
+                      </CardFooter>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Grid>
+            </>
+          )}
+        </>
       )}
     </Container>
   );
