@@ -190,14 +190,8 @@ router.get('/my-review/:cheatsheetId', authenticateToken, async (req, res) => {
       [user_id, cheatsheetId]
     );
 
-    if (!review) {
-      return res.status(404).json({
-        error: 'Review not found',
-        message: 'You have not reviewed this cheat sheet yet'
-      });
-    }
-
-    res.json({ review });
+    // Return null if no review exists
+    res.json({ review: review || null });
   } catch (error) {
     console.error('Get user review error:', error);
     res.status(500).json({
