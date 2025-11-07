@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
-import { purchasesAPI } from '../services/api';
+import { purchasesAPI, paymentsAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -139,10 +139,102 @@ const EmptyState = styled.div`
   }
 `;
 
+const QRModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-in;
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+`;
+
+const QRContent = styled.div`
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  max-width: 500px;
+  text-align: center;
+  animation: slideUp 0.3s ease-out;
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  h2 {
+    color: #131D4F;
+    margin-bottom: 1rem;
+  }
+`;
+
+const QRImage = styled.img`
+  width: 300px;
+  height: 300px;
+  margin: 1rem 0;
+`;
+
+const Instructions = styled.div`
+  text-align: left;
+  background: #f8f8f8;
+  padding: 1rem;
+  border-radius: 5px;
+  margin-top: 1rem;
+  color: #333;
+
+  ol {
+    margin-left: 1.5rem;
+    li {
+      margin-bottom: 0.5rem;
+    }
+  }
+`;
+
+const SmallButton = styled.button`
+  background: ${props => props.theme.colors.warning};
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: ${props => props.theme.radius.md};
+  font-weight: ${props => props.theme.typography.weights.semibold};
+  font-size: ${props => props.theme.typography.sizes.sm};
+  cursor: pointer;
+  transition: all ${props => props.theme.transitions.fast};
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  &:hover {
+    background: ${props => props.theme.colors.warningHover || '#e6a800'};
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
 const MyPurchases = () => {
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [downloadingOrderId, setDownloadingOrderId] = useState(null);
+  const [showQR, setShowQR] = useState(false);
+  const [qrData, setQrData] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -190,6 +282,17 @@ const MyPurchases = () => {
       toast.error(error.response?.data?.message || 'Download failed', { id: downloadToast });
     } finally {
       setDownloadingOrderId(null);
+    }
+  };
+
+  const handleShowQR = async (orderId) => {
+    try {
+      const response = await paymentsAPI.getQRCode(orderId);
+      setQrData(response.data);
+      setShowQR(true);
+    } catch (error) {
+      console.error('Failed to retrieve QR code:', error);
+      toast.error(error.response?.data?.message || 'Failed to retrieve QR code');
     }
   };
 
@@ -246,7 +349,18 @@ const MyPurchases = () => {
                 {downloadingOrderId === purchase.order_id ? 'Downloading...' : 'Download PDF'}
               </Button>
             ) : purchase.payment_status === 'pending' ? (
-              <Button disabled>Pending Approval</Button>
+              <>
+                <Button disabled>Pending Approval</Button>
+                <SmallButton onClick={() => handleShowQR(purchase.order_id)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7"/>
+                    <rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/>
+                  </svg>
+                  Show QR Code
+                </SmallButton>
+              </>
             ) : (
               <Button disabled>Payment {purchase.payment_status}</Button>
             )}
@@ -259,6 +373,32 @@ const MyPurchases = () => {
           </Actions>
         </PurchaseCard>
       ))}
+
+      {showQR && qrData && (
+        <QRModal onClick={() => setShowQR(false)}>
+          <QRContent onClick={(e) => e.stopPropagation()}>
+            <h2>Scan to Pay</h2>
+            <QRImage src={qrData.qr_code} alt="PromptPay QR Code" />
+            <p>
+              <strong>{qrData.title}</strong>
+              <br />
+              Amount: <strong>{parseFloat(qrData.amount || 0).toFixed(2)} ฿</strong>
+            </p>
+            <Instructions>
+              <ol>
+                <li>{qrData.instructions.step1}</li>
+                <li>{qrData.instructions.step2}</li>
+                <li>{qrData.instructions.step3}</li>
+                <li>{qrData.instructions.step4}</li>
+                <li>{qrData.instructions.step5}</li>
+              </ol>
+            </Instructions>
+            <Button onClick={() => setShowQR(false)} style={{ marginTop: '1rem', width: '100%' }}>
+              Close
+            </Button>
+          </QRContent>
+        </QRModal>
+      )}
     </Container>
   );
 };

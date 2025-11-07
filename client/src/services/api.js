@@ -84,6 +84,9 @@ export const paymentsAPI = {
 
   getBundleStatus: (bundleOrderId) =>
     api.get(`/api/payments/bundle-status/${bundleOrderId}`),
+
+  getQRCode: (orderId) =>
+    api.get(`/api/payments/qr/${orderId}`),
 };
 
 // Purchases API

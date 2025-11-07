@@ -366,4 +366,71 @@ router.get('/bundle-status/:bundleOrderId', authenticateToken, async (req, res) 
   }
 });
 
+/**
+ * Retrieve QR code for a pending payment
+ * GET /api/payments/qr/:orderId
+ */
+router.get('/qr/:orderId', authenticateToken, async (req, res) => {
+  const { orderId } = req.params;
+  const userId = req.user.user_id;
+
+  try {
+    const purchase = await db.queryOne(
+      `SELECT p.*, cs.title, cs.course_code, cs.price
+       FROM purchases p
+       JOIN cheat_sheets cs ON p.cheatsheet_id = cs.cheatsheet_id
+       WHERE p.order_id = ? AND p.user_id = ?`,
+      [orderId, userId]
+    );
+
+    if (!purchase) {
+      return res.status(404).json({
+        error: 'Order not found',
+        message: 'Purchase order not found'
+      });
+    }
+
+    // Only allow retrieving QR for pending payments
+    if (purchase.payment_status !== 'pending') {
+      return res.status(400).json({
+        error: 'Invalid payment status',
+        message: `Cannot retrieve QR code for ${purchase.payment_status} payment`
+      });
+    }
+
+    // Check if QR code exists
+    if (!purchase.qr_code_data) {
+      return res.status(404).json({
+        error: 'QR code not found',
+        message: 'QR code not available for this order'
+      });
+    }
+
+    res.json({
+      order_id: purchase.order_id,
+      cheatsheet_id: purchase.cheatsheet_id,
+      title: purchase.title,
+      course_code: purchase.course_code,
+      amount: purchase.payment_amount,
+      status: purchase.payment_status,
+      qr_code: purchase.qr_code_data,
+      created_at: purchase.purchase_date,
+      instructions: {
+        step1: 'Open your banking app',
+        step2: 'Scan the QR code to pay via PromptPay',
+        step3: `Pay exactly ${parseFloat(purchase.payment_amount).toFixed(2)} THB`,
+        step4: 'Wait for admin approval (usually within 24 hours)',
+        step5: 'You will receive email notification when approved'
+      }
+    });
+
+  } catch (error) {
+    console.error('QR code retrieval error:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve QR code',
+      message: 'Could not retrieve QR code for this order'
+    });
+  }
+});
+
 module.exports = router;
