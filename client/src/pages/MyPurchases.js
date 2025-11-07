@@ -98,6 +98,12 @@ const Actions = styled.div`
   gap: 0.5rem;
 `;
 
+const ButtonRow = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+`;
+
 const Button = styled.button`
   background: ${props => props.disabled ? props.theme.colors.textTertiary : props.theme.colors.primary};
   color: white;
@@ -109,6 +115,7 @@ const Button = styled.button`
   cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
   transition: all ${props => props.theme.transitions.fast};
   box-shadow: ${props => props.disabled ? 'none' : props.theme.shadows.sm};
+  flex: 1;
 
   &:hover {
     background: ${props => props.disabled ? props.theme.colors.textTertiary : props.theme.colors.primaryHover};
@@ -139,93 +146,58 @@ const EmptyState = styled.div`
   }
 `;
 
-const QRModal = styled.div`
+const Modal = styled.div`
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  animation: fadeIn 0.2s ease-in;
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
+  padding: 1rem;
 `;
 
-const QRContent = styled.div`
-  background: white;
+const ModalContent = styled.div`
+  background: ${props => props.theme.colors.surface};
+  border-radius: ${props => props.theme.radius.xl};
   padding: 2rem;
-  border-radius: 10px;
   max-width: 500px;
+  width: 100%;
   text-align: center;
-  animation: slideUp 0.3s ease-out;
-
-  @keyframes slideUp {
-    from {
-      transform: translateY(20px);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-
-  h2 {
-    color: #131D4F;
-    margin-bottom: 1rem;
-  }
 `;
 
-const QRImage = styled.img`
+const QRCode = styled.img`
   width: 300px;
   height: 300px;
-  margin: 1rem 0;
-`;
-
-const Instructions = styled.div`
-  text-align: left;
-  background: #f8f8f8;
-  padding: 1rem;
-  border-radius: 5px;
-  margin-top: 1rem;
-  color: #333;
-
-  ol {
-    margin-left: 1.5rem;
-    li {
-      margin-bottom: 0.5rem;
-    }
-  }
-`;
-
-const SmallButton = styled.button`
-  background: ${props => props.theme.colors.warning};
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
+  margin: 1.5rem auto;
+  border: 1px solid ${props => props.theme.colors.border};
   border-radius: ${props => props.theme.radius.md};
-  font-weight: ${props => props.theme.typography.weights.semibold};
-  font-size: ${props => props.theme.typography.sizes.sm};
+`;
+
+const QRButton = styled.button`
+  background: ${props => props.theme.colors.backgroundSecondary};
+  color: ${props => props.theme.colors.textSecondary};
+  border: 1px solid ${props => props.theme.colors.border};
+  padding: 0.5rem;
+  border-radius: ${props => props.theme.radius.md};
   cursor: pointer;
   transition: all ${props => props.theme.transitions.fast};
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
 
   &:hover {
-    background: ${props => props.theme.colors.warningHover || '#e6a800'};
-    transform: translateY(-1px);
+    background: ${props => props.theme.colors.border};
+    transform: scale(1.05);
   }
 
   &:active {
-    transform: translateY(0);
+    transform: scale(0.95);
   }
 `;
 
@@ -349,18 +321,17 @@ const MyPurchases = () => {
                 {downloadingOrderId === purchase.order_id ? 'Downloading...' : 'Download PDF'}
               </Button>
             ) : purchase.payment_status === 'pending' ? (
-              <>
+              <ButtonRow>
                 <Button disabled>Pending Approval</Button>
-                <SmallButton onClick={() => handleShowQR(purchase.order_id)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <QRButton onClick={() => handleShowQR(purchase.order_id)} title="Show QR Code">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <rect x="3" y="3" width="7" height="7"/>
                     <rect x="14" y="3" width="7" height="7"/>
                     <rect x="14" y="14" width="7" height="7"/>
                     <rect x="3" y="14" width="7" height="7"/>
                   </svg>
-                  Show QR Code
-                </SmallButton>
-              </>
+                </QRButton>
+              </ButtonRow>
             ) : (
               <Button disabled>Payment {purchase.payment_status}</Button>
             )}
@@ -375,29 +346,22 @@ const MyPurchases = () => {
       ))}
 
       {showQR && qrData && (
-        <QRModal onClick={() => setShowQR(false)}>
-          <QRContent onClick={(e) => e.stopPropagation()}>
+        <Modal onClick={() => setShowQR(false)}>
+          <ModalContent onClick={(e) => e.stopPropagation()}>
             <h2>Scan to Pay</h2>
-            <QRImage src={qrData.qr_code} alt="PromptPay QR Code" />
+            <QRCode src={qrData.qr_code} alt="PromptPay QR Code" />
             <p>
-              <strong>{qrData.title}</strong>
-              <br />
-              Amount: <strong>{parseFloat(qrData.amount || 0).toFixed(2)} ฿</strong>
+              <strong>Amount: {parseFloat(qrData.amount || 0).toFixed(2)} ฿</strong>
             </p>
-            <Instructions>
-              <ol>
-                <li>{qrData.instructions.step1}</li>
-                <li>{qrData.instructions.step2}</li>
-                <li>{qrData.instructions.step3}</li>
-                <li>{qrData.instructions.step4}</li>
-                <li>{qrData.instructions.step5}</li>
-              </ol>
-            </Instructions>
-            <Button onClick={() => setShowQR(false)} style={{ marginTop: '1rem', width: '100%' }}>
+            <p style={{ fontSize: '0.875rem', color: '#6E6E73', marginTop: '1rem' }}>
+              Scan this QR code with your banking app to complete the payment.
+              Your purchase will be processed once payment is confirmed by admin.
+            </p>
+            <Button onClick={() => setShowQR(false)} style={{ marginTop: '1.5rem' }}>
               Close
             </Button>
-          </QRContent>
-        </QRModal>
+          </ModalContent>
+        </Modal>
       )}
     </Container>
   );
