@@ -1,101 +1,168 @@
 const mysql = require('mysql2');
 require('dotenv').config();
 
-// Create MySQL connection pool for better performance
-const pool = mysql.createPool({
+// Base pool configuration shared across all pools
+const basePoolConfig = {
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT) || 3306,
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME || 'cheat_sheet_marketplace',
-  // Increased connection limits for rapid requests
-  connectionLimit: 20, // Increased from 10 to 20
   waitForConnections: true,
   queueLimit: 0, // Unlimited queue
   charset: 'utf8mb4',
   timezone: '+07:00',
-  // Connection health settings
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
-  // Prevent connection timeouts
   connectTimeout: 10000, // 10 seconds
-  // Keep idle connections longer to handle bursts
-  idleTimeout: 60000, // Increased from 30s to 60s
-  // Maximum lifetime of a connection
-  maxIdle: 20, // Match connectionLimit
+  idleTimeout: 60000,
+};
+
+// Executive Pool - For admin and staff operations (full access)
+const executivePool = mysql.createPool({
+  ...basePoolConfig,
+  user: process.env.DB_EXECUTIVE_USER || process.env.DB_USER || 'root',
+  password: process.env.DB_EXECUTIVE_PASSWORD || process.env.DB_PASSWORD,
+  connectionLimit: 10, // Smaller pool for admin operations
+  maxIdle: 10,
 });
 
-// Promisify for async/await usage
-const promisePool = pool.promise();
-
-// Handle pool errors
-pool.on('error', (err) => {
-  console.error('MySQL pool error:', err);
-  if (err.code === 'PROTOCOL_CONNECTION_LOST') {
-    console.error('Database connection was closed.');
-  }
-  if (err.code === 'ER_CON_COUNT_ERROR') {
-    console.error('Database has too many connections.');
-  }
-  if (err.code === 'ECONNREFUSED') {
-    console.error('Database connection was refused.');
-  }
+// Application Pool - For authenticated user operations (read/write)
+const applicationPool = mysql.createPool({
+  ...basePoolConfig,
+  user: process.env.DB_APP_USER || process.env.DB_USER || 'root',
+  password: process.env.DB_APP_PASSWORD || process.env.DB_PASSWORD,
+  connectionLimit: 20, // Larger pool for regular operations
+  maxIdle: 20,
 });
 
-// Test database connection
-pool.getConnection((err, connection) => {
-  if (err) {
-    console.error('Database connection failed:', err.message);
-    console.error('Please check your database credentials and ensure MySQL is running.');
-    // Don't exit in production, allow retry
-    if (process.env.NODE_ENV !== 'production') {
-      process.exit(1);
+// Public Pool - For unauthenticated/public operations (read-only)
+const publicPool = mysql.createPool({
+  ...basePoolConfig,
+  user: process.env.DB_PUBLIC_USER || process.env.DB_USER || 'root',
+  password: process.env.DB_PUBLIC_PASSWORD || process.env.DB_PASSWORD,
+  connectionLimit: 15, // Medium pool for public queries
+  maxIdle: 15,
+});
+
+// Promisify pools for async/await usage
+const promiseExecutivePool = executivePool.promise();
+const promiseApplicationPool = applicationPool.promise();
+const promisePublicPool = publicPool.promise();
+
+// Legacy pool reference (defaults to application pool for backward compatibility)
+const pool = applicationPool;
+const promisePool = promiseApplicationPool;
+
+// Error handler for all pools
+const setupPoolErrorHandlers = (poolInstance, poolName) => {
+  poolInstance.on('error', (err) => {
+    console.error(`MySQL ${poolName} pool error:`, err);
+    if (err.code === 'PROTOCOL_CONNECTION_LOST') {
+      console.error(`${poolName}: Database connection was closed.`);
     }
-    return;
+    if (err.code === 'ER_CON_COUNT_ERROR') {
+      console.error(`${poolName}: Database has too many connections.`);
+    }
+    if (err.code === 'ECONNREFUSED') {
+      console.error(`${poolName}: Database connection was refused.`);
+    }
+  });
+
+  poolInstance.on('enqueue', () => {
+    console.log(`${poolName}: Waiting for available connection slot - pool may be exhausted`);
+  });
+
+  // Monitor pool connection usage (only log in development to reduce noise)
+  if (process.env.NODE_ENV === 'development') {
+    poolInstance.on('acquire', (connection) => {
+      console.log(`${poolName}: Connection %d acquired`, connection.threadId);
+    });
+
+    poolInstance.on('release', (connection) => {
+      console.log(`${poolName}: Connection %d released`, connection.threadId);
+    });
   }
+};
 
-  console.log('Connected to MySQL database');
-  connection.release();
-});
+// Setup error handlers for all pools
+setupPoolErrorHandlers(executivePool, 'Executive');
+setupPoolErrorHandlers(applicationPool, 'Application');
+setupPoolErrorHandlers(publicPool, 'Public');
 
-// Monitor pool connection usage (only log in development to reduce noise)
-if (process.env.NODE_ENV === 'development') {
-  pool.on('acquire', (connection) => {
-    console.log('Connection %d acquired', connection.threadId);
-  });
+// Test all database connections
+const testPoolConnection = (poolInstance, poolName) => {
+  poolInstance.getConnection((err, connection) => {
+    if (err) {
+      console.error(`${poolName} pool connection failed:`, err.message);
+      console.error('Please check your database credentials and ensure MySQL is running.');
+      // Don't exit in production, allow retry
+      if (process.env.NODE_ENV !== 'production') {
+        process.exit(1);
+      }
+      return;
+    }
 
-  pool.on('release', (connection) => {
-    console.log('Connection %d released', connection.threadId);
-  });
-}
-
-pool.on('enqueue', () => {
-  console.log('Waiting for available connection slot - pool may be exhausted');
-});
-
-// Keep-alive mechanism: ping database every 5 minutes to prevent timeout
-let keepAliveInterval = setInterval(async () => {
-  try {
-    const connection = await promisePool.getConnection();
-    await connection.query('SELECT 1');
+    console.log(`✓ Connected to MySQL database (${poolName} pool)`);
     connection.release();
-    console.log('Database connection keep-alive ping');
-  } catch (error) {
-    console.error('Keep-alive ping failed:', error.message);
+  });
+};
+
+// Test all pools
+testPoolConnection(executivePool, 'Executive');
+testPoolConnection(applicationPool, 'Application');
+testPoolConnection(publicPool, 'Public');
+
+// Keep-alive mechanism: ping all pools every 5 minutes to prevent timeout
+let keepAliveInterval = setInterval(async () => {
+  const pools = [
+    { pool: promiseExecutivePool, name: 'Executive' },
+    { pool: promiseApplicationPool, name: 'Application' },
+    { pool: promisePublicPool, name: 'Public' }
+  ];
+
+  for (const { pool, name } of pools) {
+    try {
+      const connection = await pool.getConnection();
+      await connection.query('SELECT 1');
+      connection.release();
+      console.log(`${name} pool: Keep-alive ping successful`);
+    } catch (error) {
+      console.error(`${name} pool: Keep-alive ping failed:`, error.message);
+    }
   }
 }, 5 * 60 * 1000); // 5 minutes
 
-// Graceful shutdown
+// Graceful shutdown - close all pools
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, closing database connections...');
+  console.log('SIGTERM received, closing all database connections...');
   clearInterval(keepAliveInterval);
-  pool.end((err) => {
-    if (err) {
-      console.error('Error closing database pool:', err);
-    } else {
-      console.log('Database pool closed successfully');
+
+  let poolsClosed = 0;
+  const totalPools = 3;
+
+  const checkAllClosed = () => {
+    poolsClosed++;
+    if (poolsClosed === totalPools) {
+      console.log('All database pools closed successfully');
+      process.exit(0);
     }
-    process.exit(0);
+  };
+
+  executivePool.end((err) => {
+    if (err) console.error('Error closing Executive pool:', err);
+    else console.log('Executive pool closed');
+    checkAllClosed();
+  });
+
+  applicationPool.end((err) => {
+    if (err) console.error('Error closing Application pool:', err);
+    else console.log('Application pool closed');
+    checkAllClosed();
+  });
+
+  publicPool.end((err) => {
+    if (err) console.error('Error closing Public pool:', err);
+    else console.log('Public pool closed');
+    checkAllClosed();
   });
 });
 
@@ -121,13 +188,41 @@ async function retryOperation(operation, maxRetries = 3) {
   }
 }
 
-// Database utility functions
+// Helper function to select appropriate pool based on context
+const selectPool = (context = {}) => {
+  // Context can include: { userRole: 'executive'|'application'|'public', pool: 'executive'|'application'|'public' }
+
+  // Allow explicit pool selection
+  if (context.pool === 'executive') {
+    return promiseExecutivePool;
+  }
+  if (context.pool === 'public') {
+    return promisePublicPool;
+  }
+  if (context.pool === 'application') {
+    return promiseApplicationPool;
+  }
+
+  // Auto-select based on user role
+  if (context.userRole === 'executive') {
+    return promiseExecutivePool;
+  }
+  if (context.userRole === 'public') {
+    return promisePublicPool;
+  }
+
+  // Default to application pool
+  return promiseApplicationPool;
+};
+
+// Database utility functions with pool selection support
 const db = {
   // Execute a query with parameters
-  async query(sql, params = []) {
+  async query(sql, params = [], context = {}) {
+    const pool = selectPool(context);
     return retryOperation(async () => {
       try {
-        const [rows] = await promisePool.execute(sql, params);
+        const [rows] = await pool.execute(sql, params);
         return rows;
       } catch (error) {
         console.error('Database query error:', error.message);
@@ -138,16 +233,17 @@ const db = {
   },
 
   // Get a single row
-  async queryOne(sql, params = []) {
-    const rows = await this.query(sql, params);
+  async queryOne(sql, params = [], context = {}) {
+    const rows = await this.query(sql, params, context);
     return rows[0] || null;
   },
 
   // Insert and return the inserted ID
-  async insert(sql, params = []) {
+  async insert(sql, params = [], context = {}) {
+    const pool = selectPool(context);
     return retryOperation(async () => {
       try {
-        const [result] = await promisePool.execute(sql, params);
+        const [result] = await pool.execute(sql, params);
         return result.insertId;
       } catch (error) {
         console.error('Database insert error:', error.message);
@@ -158,10 +254,11 @@ const db = {
   },
 
   // Update and return affected rows
-  async update(sql, params = []) {
+  async update(sql, params = [], context = {}) {
+    const pool = selectPool(context);
     return retryOperation(async () => {
       try {
-        const [result] = await promisePool.execute(sql, params);
+        const [result] = await pool.execute(sql, params);
         return result.affectedRows;
       } catch (error) {
         console.error('Database update error:', error.message);
@@ -172,10 +269,11 @@ const db = {
   },
 
   // Delete and return affected rows
-  async delete(sql, params = []) {
+  async delete(sql, params = [], context = {}) {
+    const pool = selectPool(context);
     return retryOperation(async () => {
       try {
-        const [result] = await promisePool.execute(sql, params);
+        const [result] = await pool.execute(sql, params);
         return result.affectedRows;
       } catch (error) {
         console.error('Database delete error:', error.message);
@@ -185,9 +283,10 @@ const db = {
     });
   },
 
-  // Begin transaction
-  async beginTransaction() {
-    const connection = await promisePool.getConnection();
+  // Begin transaction (with pool selection)
+  async beginTransaction(context = {}) {
+    const pool = selectPool(context);
+    const connection = await pool.getConnection();
     await connection.beginTransaction();
     return connection;
   },
@@ -206,7 +305,16 @@ const db = {
 
   // Close all connections
   end() {
-    pool.end();
+    executivePool.end();
+    applicationPool.end();
+    publicPool.end();
+  },
+
+  // Direct pool access for advanced use cases
+  pools: {
+    executive: promiseExecutivePool,
+    application: promiseApplicationPool,
+    public: promisePublicPool,
   }
 };
 

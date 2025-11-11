@@ -17,9 +17,11 @@ const authenticateToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Get fresh user data from database (include is_deactivated)
+    // Use application pool for authentication queries
     const user = await db.queryOne(
       'SELECT user_id, google_id, name, email, is_admin, is_seller, is_staff, is_deactivated, created_at FROM users WHERE user_id = ?',
-      [decoded.userId]
+      [decoded.userId],
+      { pool: 'application' }
     );
 
     if (!user) {
@@ -45,7 +47,14 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
+    // Determine database role based on user permissions
+    let dbRole = 'application'; // default
+    if (user.is_admin || user.is_staff) {
+      dbRole = 'executive';
+    }
+
     req.user = user;
+    req.dbContext = { userRole: dbRole };
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
@@ -134,6 +143,7 @@ const optionalAuth = async (req, res, next) => {
 
   if (!token) {
     req.user = null;
+    req.dbContext = { userRole: 'public' };
     return next();
   }
 
@@ -142,18 +152,27 @@ const optionalAuth = async (req, res, next) => {
 
     const user = await db.queryOne(
       'SELECT user_id, google_id, name, email, is_admin, is_seller, is_staff, is_deactivated, created_at FROM users WHERE user_id = ?',
-      [decoded.userId]
+      [decoded.userId],
+      { pool: 'application' }
     );
 
     // Only set req.user if user exists, is not deactivated, and has valid domain
     if (user && !user.is_deactivated && user.email.endsWith('@g.siit.tu.ac.th')) {
+      // Determine database role based on user permissions
+      let dbRole = 'application'; // default
+      if (user.is_admin || user.is_staff) {
+        dbRole = 'executive';
+      }
       req.user = user;
+      req.dbContext = { userRole: dbRole };
     } else {
       req.user = null;
+      req.dbContext = { userRole: 'public' };
     }
   } catch (error) {
     // Silently fail for optional auth
     req.user = null;
+    req.dbContext = { userRole: 'public' };
   }
 
   next();
@@ -189,11 +208,12 @@ const verifyCheatSheetAccess = async (req, res, next) => {
 
   try {
     // Check if user has purchased this cheat sheet
+    // Use the context from the auth middleware
     const purchase = await db.queryOne(`
       SELECT order_id, payment_status, purchase_date
       FROM purchases
       WHERE user_id = ? AND cheatsheet_id = ? AND payment_status = 'paid'
-    `, [userId, cheatsheetId]);
+    `, [userId, cheatsheetId], req.dbContext || {});
 
     if (!purchase) {
       return res.status(403).json({
@@ -220,9 +240,11 @@ const verifyCheatSheetOwnership = async (req, res, next) => {
 
   try {
     // Check if cheat sheet exists and get creator
+    // Use the context from the auth middleware
     const cheatSheet = await db.queryOne(
       'SELECT cheatsheet_id, created_by FROM cheat_sheets WHERE cheatsheet_id = ?',
-      [id]
+      [id],
+      req.dbContext || {}
     );
 
     if (!cheatSheet) {
