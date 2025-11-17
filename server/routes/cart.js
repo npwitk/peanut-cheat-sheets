@@ -96,6 +96,22 @@ router.post('/add', authenticateToken, async (req, res) => {
     // Get output variables
     const output = await db.queryOne('SELECT @success as success, @message as message');
 
+    // Get updated cart count
+    const countResult = await db.queryOne(
+      'SELECT COUNT(*) as count FROM cart WHERE user_id = ?',
+      [userId]
+    );
+
+    // Check if item was already in cart (success but with specific message)
+    if (output.success && output.message === 'Item already in cart') {
+      return res.status(200).json({
+        success: true,
+        message: output.message,
+        cart_count: countResult.count,
+        already_in_cart: true
+      });
+    }
+
     if (!output.success) {
       return res.status(400).json({
         error: 'Cannot add to cart',
@@ -103,16 +119,11 @@ router.post('/add', authenticateToken, async (req, res) => {
       });
     }
 
-    // Get updated cart count
-    const countResult = await db.queryOne(
-      'SELECT COUNT(*) as count FROM cart WHERE user_id = ?',
-      [userId]
-    );
-
     res.json({
       success: true,
       message: output.message,
-      cart_count: countResult.count
+      cart_count: countResult.count,
+      already_in_cart: false
     });
   } catch (error) {
     console.error('Add to cart error:', error);
@@ -239,7 +250,7 @@ router.post('/checkout', authenticateToken, async (req, res) => {
     if (!output.item_count || output.item_count === 0) {
       return res.status(400).json({
         error: 'Empty cart',
-        message: 'Your cart is empty'
+        message: 'Your cart is empty or all items have already been purchased. Please check your library for purchased items.'
       });
     }
 

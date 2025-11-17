@@ -159,3 +159,22 @@ export const TrashIcon = ({ size = 24, color = 'currentColor' }) => (
     <line x1="14" y1="11" x2="14" y2="17"></line>
   </svg>
 );
+
+// Info icon
+export const InfoIcon = ({ size = 20, color = '#3b82f6' }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{ verticalAlign: 'middle', marginRight: '6px' }}
+  >
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="16" x2="12" y2="12"/>
+    <line x1="12" y1="8" x2="12.01" y2="8"/>
+  </svg>
+);

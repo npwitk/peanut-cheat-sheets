@@ -3,8 +3,9 @@ import styled from 'styled-components';
 import { useParams, useNavigate } from 'react-router-dom';
 import { cheatSheetsAPI, paymentsAPI, purchasesAPI, cartAPI, reviewsAPI, authAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import toast from 'react-hot-toast';
-import { StarIcon, EyeIcon, CartIcon } from '../components/Icons';
+import { StarIcon, EyeIcon, CartIcon, InfoIcon } from '../components/Icons';
 import StarRating from '../components/StarRating';
 import YouTubeEmbed from '../components/YouTubeEmbed';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -441,12 +442,6 @@ const PreviewImage = styled.img`
   height: auto;
   border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  cursor: pointer;
-  transition: transform 0.3s;
-
-  &:hover {
-    transform: scale(1.02);
-  }
 `;
 
 const PreviewTitle = styled.h3`
@@ -622,6 +617,7 @@ const PurchaseRequired = styled.div`
 const CheatSheetDetail = () => {
   const { id } = useParams();
   const { isAuthenticated, login, user } = useAuth();
+  const { refreshCartCount } = useCart();
   const navigate = useNavigate();
   const [cheatSheet, setCheatSheet] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -673,8 +669,19 @@ const CheatSheetDetail = () => {
 
     setAddingToCart(true);
     try {
-      await cartAPI.addToCart(cheatSheet.cheatsheet_id);
-      toast.success('Added to cart!');
+      const response = await cartAPI.addToCart(cheatSheet.cheatsheet_id);
+
+      // Check if item was already in cart
+      if (response.data.already_in_cart) {
+        toast('Item already in cart', {
+          icon: <InfoIcon size={20} color="#3b82f6" />
+        });
+      } else {
+        toast.success('Added to cart!');
+      }
+
+      // Refresh cart count badge
+      refreshCartCount();
 
       // Navigate to cart page
       navigate('/cart');
@@ -898,12 +905,6 @@ const CheatSheetDetail = () => {
                 ? cheatSheet.preview_image_path
                 : `${process.env.REACT_APP_API_URL || 'http://localhost:4000'}/${cheatSheet.preview_image_path.replace(/\\/g, '/')}`}
               alt={`${cheatSheet.title} preview`}
-              onClick={() => window.open(
-                cheatSheet.preview_image_path?.startsWith('http')
-                  ? cheatSheet.preview_image_path
-                  : `${process.env.REACT_APP_API_URL || 'http://localhost:4000'}/${cheatSheet.preview_image_path.replace(/\\/g, '/')}`,
-                '_blank'
-              )}
               onError={(e) => {
                 console.error('Failed to load preview image:', cheatSheet.preview_image_path);
                 e.target.parentElement.style.display = 'none';
