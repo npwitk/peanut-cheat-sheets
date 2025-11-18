@@ -327,7 +327,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 });
 
 /**
- * Create new cheat sheet (admin only)
+ * Create new cheat sheet (seller, admin)
  * POST /api/cheatsheets
  */
 router.post('/', authenticateToken, requireUploader, upload.fields([
